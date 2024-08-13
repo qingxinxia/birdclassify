@@ -152,6 +152,3 @@ if __name__ == '__main__':
         # plt.figure(2)
         # plt.imshow(sample_batched['mel_spectrogram'].log2()[0,0,:,:].numpy(), cmap='gray')
         # plt.show()
-
-
-
