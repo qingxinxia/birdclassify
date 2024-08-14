@@ -15,7 +15,7 @@ def read_data_label(folders):
     '''
     folders = [Recording_1, Recording_2, 3, 4]
     '''
-    data_root_path = os.path.join(os.getcwd(), 'datasets', 'zenodo_chronister')
+    data_root_path = r'D:\code\bird_data\chronister'
     annotation_root_path = os.path.join(data_root_path, 'annotation_Files')
     wav_root_path = os.path.join(data_root_path, 'wav_Files')
     max_wav_lens = []
