@@ -12,86 +12,160 @@ from pydub.utils import which
 
 # AudioSegment.converter = which("ffmpeg")
 
-class BirdAudioSegmentDataset(Dataset):
-    def __init__(self, audio_path, annotation_path, transform=None, sample_rate=22050):
-        self.audio_path = audio_path
-        self.transform = transform
-        self.sample_rate = sample_rate
-        self.segments = []
 
-        # Load annotations
-        with open(annotation_path, 'r') as f:
-            for line in f:
-                start, end, label = line.strip().split('\t')
-                self.segments.append((float(start), float(end), label))
-
-        # Load and convert audio using pydub
-        self.audio = AudioSegment.from_mp3(audio_path)
-
-    def __len__(self):
-        return len(self.segments)
-
-    def __getitem__(self, idx):
-        start_time, end_time, label = self.segments[idx]
-
-        # Extract segment in milliseconds
-        start_ms = start_time * 1000
-        end_ms = end_time * 1000
-        segment = self.audio[start_ms:end_ms]
-
-        # Export segment to raw audio data
-        y = np.array(segment.get_array_of_samples(), dtype=np.float32) / 32768.0
-
-        # Resample the segment if necessary
-        y = librosa.resample(y, orig_sr=segment.frame_rate, target_sr=self.sample_rate)
-
-        # Transform audio
-        if self.transform:
-            y = self.transform(y)
-
-        # # 比较每秒钟梅尔光谱的特征
-        # melp = r'D:\code\bird_data\wmwb\spectrograms\Acrocephalus_arundinaceus\XC417157_0.npy'
-        # mel_array = np.load(melp)
-        # # Convert label to a numerical format if needed
-        # label = self._label_to_int(label)
-
-        return y, label
-
-    def _label_to_int(self, label):
-        # Example label conversion
-        label_dict = {'song': 0}  # Add more labels as needed
-        return label_dict.get(label, -1)
+#---------------------------------------------
+import pickle
+def list_subfolders(directory):
+    try:
+        # Get a list of all sub-folder names in the directory
+        subfolders = [name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name))]
+        return subfolders
+    except FileNotFoundError:
+        return f"The directory '{directory}' does not exist."
+    except Exception as e:
+        return f"An error occurred: {e}"
 
 
-# Example transform function for generating Mel spectrogram
+
+def list_wav_files(directory):
+    try:
+        # Get a list of all mp3 files in the directory
+        mp3_files = [file for file in os.listdir(directory) if file.endswith('.wav')]
+        return mp3_files
+    except FileNotFoundError:
+        return f"The directory '{directory}' does not exist."
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+def load_labels(txt_path):
+    segments = []
+    # Load annotations
+    with open(txt_path, 'r') as f:
+        for line in f:
+            start, end, label = line.strip().split('\t')
+            segments.append((float(start), float(end), label))
+    return segments
+
+
 def transform_audio_to_mel(y, sr=22050, n_mels=224, n_fft=2048, hop_length=512):
     mel_spectrogram = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
     mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)
     return mel_spectrogram_db
 
-# Convert MP3 to WAV using pydub
-def convert_mp3_to_wav(mp3_path, wav_path):
-    print(AudioSegment.ffmpeg)
-    AudioSegment.converter = which("ffmpeg")
-    audio = AudioSegment.from_mp3(mp3_path)
-    audio.export(wav_path, format='wav')
 
+root_path = r'D:\code\bird_data\wmwb\audio_files'
+subfolders = list_subfolders(root_path)
+def read_data():
+    features, subjects, classes = [], [], []
+    for wav_folder in subfolders:
+        wav_files = list_wav_files(os.path.join(root_path, wav_folder))
+        for subjectid, wav_file in enumerate(wav_files):
+            wav_path = os.path.join(root_path, wav_folder, wav_file)
+            txt_path = wav_path.replace('.wav', '.txt')
+            segments = load_labels(txt_path)  # 用于获得单个MP3文件中有效时间
+
+            # Load and convert audio using pydub
+            audio = AudioSegment.from_mp3(wav_path)
+            audio_segments = []
+            for segment in segments:
+                start_time, end_time, label = segment
+                # Extract segment in milliseconds
+                start_ms = start_time * 1000
+                end_ms = end_time * 1000
+                audio_seg = audio[start_ms:end_ms]
+
+                # Export segment to raw audio data
+                y = np.array(audio_seg.get_array_of_samples(), dtype=np.float32) / 32768.0
+
+                # Resample the segment if necessary
+                y = librosa.resample(y, orig_sr=audio_seg.frame_rate, target_sr=22050)
+
+                # Transform audio
+                mel_spectrogram_db = transform_audio_to_mel(y)
+
+                audio_segments.append(mel_spectrogram_db)
+
+            audio_array = np.concatenate(audio_segments, axis=1)
+            # audio_array.shape
+            # 接下来添加 fileID和classID
+            mel_len = audio_array.shape[1]  # 和时间长度对应
+            wavid = np.ones(mel_len) * subjectid
+            classstr = [wav_folder] * mel_len
+
+            features.append(audio_array)
+            subjects.append(wavid)
+            classes.append(classstr)
+
+            # print('')
+
+    with open('features.pkl', 'wb') as f:
+        pickle.dump(features, f)
+    with open('subjects.pkl', 'wb') as f:
+        pickle.dump(subjects, f)
+    with open('classes.pkl', 'wb') as f:
+        pickle.dump(classes, f)
+
+
+def load_data():
+    with open('features.pkl', 'rb') as f:
+        features = pickle.load(f)
+    with open('subjects.pkl', 'rb') as f:
+        subjects = pickle.load(f)
+    with open('classes.pkl', 'rb') as f:
+        classes = pickle.load(f)
+
+    return features, subjects, classes
+#---------------------------------------------
+
+
+class BirdAudioSegmentDataset(Dataset):
+    def __init__(self, audio, subject, classlabel):
+        self.audio = audio
+        self.subject = subject
+        self.classlabel = classlabel
+
+    def __len__(self):
+        return len(self.subject)
+
+    def __getitem__(self, idx):
+        return self.audio[idx], self.classlabel[idx]
+
+    # def _label_to_int(self, label):
+    #     # Example label conversion
+    #     label_dict = {'song': 0}  # Add more labels as needed
+    #     return label_dict.get(label, -1)
+
+
+
+#
+#
+#
 def main():
-    # Define paths to the audio file and annotation file
-    root_p = r'D:\code\bird_data\wmwb\audio_files\Acrocephalus_arundinaceus'
-    audio_path = os.path.join(root_p, 'XC417157.wav')
-    annotation_path = os.path.join(root_p, 'XC417157.txt')
+
+    root_path = r'D:\code\bird_data\wmwb\audio_files'
+    subfolders = list_subfolders(root_path)
+
+    folderIDs = np.arange(len(subfolders))
+    label_dict = dict(zip(subfolders, folderIDs))
+
+    audios, subjects, classlabels = load_data()
+
+    audios = np.concatenate(audios, axis=1).transpose()
+    subjects = np.concatenate(subjects)
+    classlabels = np.concatenate(classlabels)
+
+    classlabelIDs = [label_dict[i] for i in classlabels]
 
     # Instantiate the dataset
-    dataset = BirdAudioSegmentDataset(mp3_path, annotation_path, transform=transform_audio_to_mel)
+    dataset = BirdAudioSegmentDataset(audios, subjects, classlabelIDs)
 
     # Create the DataLoader
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0)
+    dataloader = DataLoader(dataset, batch_size=254, shuffle=True, num_workers=0)
 
     # Example usage of the dataloader
     for batch in dataloader:
-        inputs, labels = batch
-        print(inputs.shape, labels)
+        inputs, labels = batch  # inputs=batch, feature dim; labels=batch
+        print(inputs.shape, labels.shape)
         # Your training code here
 
 if __name__ == '__main__':
