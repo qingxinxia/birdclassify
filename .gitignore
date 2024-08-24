@@ -1,3 +1,4 @@
+dataset/
 datasets/websites.txt
 datasets/RCL_FS_BSED/DCASE2022_task5_Training_set_classes.csv
 datasets/RCL_FS_BSED/DCASE2022_task5_Validation_set_classes.csv
