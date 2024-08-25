@@ -138,9 +138,6 @@ class BirdAudioSegmentDataset(Dataset):
     #     label_dict = {'song': 0}  # Add more labels as needed
     #     return label_dict.get(label, -1)
 
-
-
-#
 #
 #
 def main():

@@ -136,11 +136,34 @@ class BirdAudioSegmentDataset(Dataset):
     #     return label_dict.get(label, -1)
 
 
+def sliding_window_split(sample, subject, classlabels, window_size=45, step=35):
+    len_data, dim = sample.shape
+    new_len = (len_data - window_size) // step + 1
+    batch_samples = []
+    batch_subjects = []
+    batch_classlabels = []
 
-#
-#
+    for start in range(0, len_data - window_size + 1, step):
+        end = start + window_size
+
+        # Extracting the window from sample
+        batch_samples.append(sample[start:end])
+
+        # Extracting the window from subject
+        batch_subjects.append(subject[start:end])
+
+        # Extracting the window from classlabels
+        batch_classlabels.append(classlabels[start:end])
+
+    # Converting lists to numpy arrays
+    batch_samples = np.array(batch_samples)
+    batch_subjects = np.array(batch_subjects)
+    batch_classlabels = np.array(batch_classlabels)
+
+    return batch_samples, batch_subjects, batch_classlabels
 #
 def main():
+    # read_data()
 
     root_path = r'D:\code\bird_data\wmwb\audio_files'
     subfolders = list_subfolders(root_path)
@@ -156,8 +179,11 @@ def main():
 
     classlabelIDs = [label_dict[i] for i in classlabels]
 
+    batch_samples, batch_subjects, batch_classlabels = sliding_window_split(audios, subjects, classlabelIDs)
+
     # Instantiate the dataset
-    dataset = BirdAudioSegmentDataset(audios, subjects, classlabelIDs)
+    # dataset = BirdAudioSegmentDataset(audios, subjects, classlabelIDs)
+    dataset = BirdAudioSegmentDataset(batch_samples, batch_subjects, batch_classlabels)
 
     # Create the DataLoader
     dataloader = DataLoader(dataset, batch_size=254, shuffle=True, num_workers=0)
