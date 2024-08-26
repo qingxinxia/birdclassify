@@ -107,11 +107,12 @@ def read_data():
 
 
 def load_data():
-    with open('features.pkl', 'rb') as f:
+    datap = os.getcwd()
+    with open(os.path.join(datap, 'prepare_data', 'features.pkl'), 'rb') as f:
         features = pickle.load(f)
-    with open('subjects.pkl', 'rb') as f:
+    with open(os.path.join(datap, 'prepare_data', 'subjects.pkl'), 'rb') as f:
         subjects = pickle.load(f)
-    with open('classes.pkl', 'rb') as f:
+    with open(os.path.join(datap, 'prepare_data', 'classes.pkl'), 'rb') as f:
         classes = pickle.load(f)
 
     return features, subjects, classes
@@ -165,6 +166,7 @@ def sliding_window_split(sample, subject, classlabels, window_size=45, step=35):
 def main():
     # read_data()
 
+    # root_path = r'D:\code\BirdMLClassification\transfer_learning'
     root_path = r'D:\code\bird_data\wmwb\audio_files'
     subfolders = list_subfolders(root_path)
 
