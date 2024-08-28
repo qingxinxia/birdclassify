@@ -14,33 +14,33 @@ class TinyNet(nn.Module):
         self.num_ch_in = num_ch_in
         self.num_ch_out = num_ch_out
         
-        self.b0_conv = nn.Conv1d(self.num_ch_in, 16, 2, padding=0, bias=True)
+        self.b0_conv = nn.Conv1d(self.num_ch_in, 64, 2, padding=0, bias=True)
         self.b0_relu = nn.ReLU()
         self.b0_pool = nn.AvgPool1d(2, stride=2)
 
-        self.b1_conv = nn.Conv1d(16, 16, 2, padding=0, bias=True)
+        self.b1_conv = nn.Conv1d(64, 64, 2, padding=0, bias=True)
         self.b1_relu = nn.ReLU()
         self.b1_pool = nn.AvgPool1d(2, stride=2)
 
-        self.b2_conv = nn.Conv1d(16, 8, 2, padding=0, bias=True)
+        self.b2_conv = nn.Conv1d(64, 32, 2, padding=0, bias=True)
         self.b2_relu = nn.ReLU()
         self.b2_pool = nn.AvgPool1d(2, stride=2)
 
-        self.b3_conv = nn.Conv1d(8, 8, 2, padding=0, bias=True)
+        self.b3_conv = nn.Conv1d(32, 16, 2, padding=0, bias=True)
         self.b3_relu = nn.ReLU()
         self.b3_pool = nn.AvgPool1d(2, stride=2)
 
-        self.b4_conv = nn.Conv1d(8, 8, 2, padding=0, bias=True)
+        self.b4_conv = nn.Conv1d(16, 8, 2, padding=0, bias=True)
         self.b4_relu = nn.ReLU()
         self.b4_pool = nn.AvgPool1d(2, stride=2)
 
         self.flatten = nn.Flatten()
 
-        self.fc0 = nn.Linear(8, 8, bias=True)
+        self.fc0 = nn.Linear(48, 32, bias=True)
         self.fc0_relu = nn.ReLU()
-        self.fc1 = nn.Linear(8, 8, bias=True)
+        self.fc1 = nn.Linear(32, 32, bias=True)
         self.fc1_relu = nn.ReLU()
-        self.fc2 = nn.Linear(8, self.num_ch_out, bias=True)
+        self.fc2 = nn.Linear(32, self.num_ch_out, bias=True)
         
     def forward(self, x):
 
@@ -114,5 +114,5 @@ def main() -> None:
     summarize(tinynet, input_size=input_size, verbose=verbose)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
