@@ -94,7 +94,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Step 6: Training loop
-    num_epochs = 10
+    num_epochs = 1000
 
     for epoch in range(num_epochs):
         model.train()
@@ -132,27 +132,34 @@ def main():
 
         print(f"Validation Loss: {val_loss/len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
 
+
+        if (epoch == num_epochs-1) or (epoch % 10 == 0):
+        # if (epoch % 100 == 0) or (epoch == args.n_epoch-1):
+            model_dir = 'pretrain_ResNet18_' + str(epoch) + '.pt'
+            print('Saving model at {} epoch to {}'.format(epoch, model_dir))
+            # torch.save(model.state_dict(), model_dir)
+            torch.save({'model_state_dict': model.state_dict()}, model_dir)
+
+        # Step 8: test loop
+        # model.eval()
+        test_loss = 0.0
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                test_loss += loss.item()
+
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        print(f"Test Loss: {test_loss / len(val_loader):.4f}, "
+              f"Accuracy: {100 * correct / total:.2f}%")
     print("Training complete.")
-
-    # Step 8: test loop
-    model.eval()
-    test_loss = 0.0
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            test_loss += loss.item()
-
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    print(f"Test Loss: {test_loss / len(val_loader):.4f}, "
-          f"Accuracy: {100 * correct / total:.2f}%")
 
     return
 
