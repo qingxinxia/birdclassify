@@ -71,7 +71,8 @@ def load_data(datap):
     return trainX, trainY0, valX, valY0, testX, testY0
 
 def main():
-    root_path = r'dataset/wmwb'
+    # root_path = r'dataset/wmwb'
+    root_path = r'D:\code\BirdMLClassification\transfer_learning'
     teacherWeightPath = "pretrain_ResNet18_40.pt"
     trainX, trainY0, valX, valY0, testX, testY0 = load_data(root_path)
 
@@ -117,12 +118,15 @@ def main():
     print(device)
 
     teacher_model = ResNetClassifier(num_classes=20).to(device)
-    teacher_model.load_state_dict(torch.load(teacherWeightPath))
+    # teacher_model.load_state_dict(torch.load(teacherWeightPath))
+    # Load the saved checkpoint
+    checkpoint = torch.load(teacherWeightPath)
+    teacher_model.load_state_dict(checkpoint['model_state_dict'])
 
     model = TinyNet(224, 20).to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Step 6: Training loop
     num_epochs = 200
@@ -141,8 +145,8 @@ def main():
             with torch.no_grad():
                 outputsT = teacher_model(inputs)
 
-            loss = distillation_loss(outputs,outputsT, labels,temperature=0.7,alpha=0.7)
-            loss = criterion(outputs, labels)
+            loss = distillation_loss(outputs, outputsT, labels, temperature=0.95, alpha=0.25)
+            # loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
 
@@ -169,27 +173,27 @@ def main():
 
         print(f"Validation Loss: {val_loss/len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
 
-    print("Training complete.")
+    # print("Training complete.")
 
-    # Step 8: test loop
-    model.eval()
-    test_loss = 0.0
-    correct = 0
-    total = 0
+        # Step 8: test loop
+        model.eval()
+        test_loss = 0.0
+        correct = 0
+        total = 0
 
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            test_loss += loss.item()
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                test_loss += loss.item()
 
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
 
-    print(f"Test Loss: {test_loss / len(val_loader):.4f}, "
-          f"Accuracy: {100 * correct / total:.2f}%")
+        print(f"Test Loss: {test_loss / len(val_loader):.4f}, "
+              f"Accuracy: {100 * correct / total:.2f}%")
 
     return
 
