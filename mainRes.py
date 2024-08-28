@@ -32,7 +32,7 @@ class CustomDataset(Dataset):
 class ResNetClassifier(nn.Module):
     def __init__(self, num_classes):
         super(ResNetClassifier, self).__init__()
-        self.resnet = models.resnet18(pretrained=True)
+        self.resnet = models.resnet18(pretrained=False)
         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
 
@@ -93,8 +93,13 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    # # Load the saved checkpoint
+    # teacherWeightPath = "pretrain_ResNet18_40.pt"
+    # checkpoint = torch.load(teacherWeightPath)
+    # model.load_state_dict(checkpoint['model_state_dict'])
+
     # Step 6: Training loop
-    num_epochs = 1000
+    num_epochs = 50
 
     for epoch in range(num_epochs):
         model.train()
@@ -113,24 +118,24 @@ def main():
 
         print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader):.4f}")
 
-        # Step 7: Validation loop
-        model.eval()
-        val_loss = 0.0
-        correct = 0
-        total = 0
-
-        with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
-
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-
-        print(f"Validation Loss: {val_loss/len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
+        # # Step 7: Validation loop
+        # model.eval()
+        # val_loss = 0.0
+        # correct = 0
+        # total = 0
+        #
+        # with torch.no_grad():
+        #     for inputs, labels in val_loader:
+        #         inputs, labels = inputs.to(device), labels.to(device)
+        #         outputs = model(inputs)
+        #         loss = criterion(outputs, labels)
+        #         val_loss += loss.item()
+        #
+        #         _, predicted = torch.max(outputs, 1)
+        #         total += labels.size(0)
+        #         correct += (predicted == labels).sum().item()
+        #
+        # print(f"Validation Loss: {val_loss/len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
 
 
         if (epoch == num_epochs-1) or (epoch % 10 == 0):

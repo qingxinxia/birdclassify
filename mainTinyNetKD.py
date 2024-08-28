@@ -9,7 +9,7 @@ from torchvision import models, transforms
 import numpy as np
 from sklearn.model_selection import train_test_split
 from prepare_data.prepare_wmwb import list_subfolders, sliding_window_split
-from models import TinyNet
+from models import TinyNet, Net
 import torch.nn.functional as F
 
 def distillation_loss(student_logits, teacher_logits, labels, temperature, alpha):
@@ -50,7 +50,7 @@ class CustomDataset(Dataset):
 class ResNetClassifier(nn.Module):
     def __init__(self, num_classes):
         super(ResNetClassifier, self).__init__()
-        self.resnet = models.resnet18(pretrained=True)
+        self.resnet = models.resnet18(pretrained=False)
         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
 
@@ -73,7 +73,7 @@ def load_data(datap):
 def main():
     # root_path = r'dataset/wmwb'
     root_path = r'D:\code\BirdMLClassification\transfer_learning'
-    teacherWeightPath = "pretrain_ResNet18_40.pt"
+    teacherWeightPath = "pretrain_ResNet18_49.pt"
     trainX, trainY0, valX, valY0, testX, testY0 = load_data(root_path)
 
     unique_labels = np.unique(trainY0)
@@ -121,9 +121,11 @@ def main():
     # teacher_model.load_state_dict(torch.load(teacherWeightPath))
     # Load the saved checkpoint
     checkpoint = torch.load(teacherWeightPath)
+    # checkpoint = torch.load(teacherWeightPath, map_location="mps")
     teacher_model.load_state_dict(checkpoint['model_state_dict'])
 
-    model = TinyNet(224, 20).to(device)
+    # model = TinyNet(224, 20).to(device)
+    model = Net().to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -145,7 +147,7 @@ def main():
             with torch.no_grad():
                 outputsT = teacher_model(inputs)
 
-            loss = distillation_loss(outputs, outputsT, labels, temperature=0.95, alpha=0.25)
+            loss = distillation_loss(outputs, outputsT, labels, temperature=7, alpha=0.25)
             # loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
