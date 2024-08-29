@@ -3,7 +3,7 @@ from __future__ import annotations
 from torch import nn
 import torchinfo
 import torch.nn.functional as F
-
+import torch
 
 class TinyNet(nn.Module):
 
@@ -81,28 +81,29 @@ class Net(nn.Module):
             params: (Params) contains num_channels
         """
         super(Net, self).__init__()
-        self.num_channels = 16
+        self.num_channels = 8
 
         # each of the convolution layers below have the arguments (input_channels, output_channels, filter_size,
         # stride, padding). We also include batch normalisation layers that help stabilise training.
         # For more details on how to use these layers, check out the documentation.
         # self.conv1 = nn.Conv2d(1, self.num_channels, 3, stride=1, padding=1)
-        self.conv1 = nn.Conv2d(1, self.num_channels, 12, stride=3, padding=1)
+        self.conv1 = nn.Conv2d(1, self.num_channels, 6, stride=3, padding=1)
         self.bn1 = nn.BatchNorm2d(self.num_channels)
         # self.conv2 = nn.Conv2d(self.num_channels, self.num_channels * 2, 3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(self.num_channels, self.num_channels * 2, 6, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(self.num_channels, self.num_channels * 2, 3, stride=2, padding=1)
         self.bn2 = nn.BatchNorm2d(self.num_channels * 2)
         # self.conv3 = nn.Conv2d(self.num_channels * 2, self.num_channels * 4, 3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(self.num_channels * 2, self.num_channels * 4, 3, stride=2, padding=1)
-        self.bn3 = nn.BatchNorm2d(self.num_channels * 4)
+        # self.conv3 = nn.Conv2d(self.num_channels * 2, self.num_channels * 4, 3, stride=2, padding=1)
+        # self.bn3 = nn.BatchNorm2d(self.num_channels * 4)
 
         # 2 fully connected layers to transform the output of the convolution layers to the final output
         # self.fc1 = nn.Linear(4 * 4 * self.num_channels * 4, self.num_channels * 4)
         # self.fc1 = nn.Linear(50176, self.num_channels * 4)
-        self.fc1 = nn.Linear(256, self.num_channels * 4)
+        self.fc1 = nn.Linear(64, self.num_channels * 4)
         self.fcbn1 = nn.BatchNorm1d(self.num_channels * 4)
         self.fc2 = nn.Linear(self.num_channels * 4, 20)
-        self.dropout_rate = 0.5
+        self.dropout_rate = 0.1
+        self.maxpool = nn.MaxPool2d(4, stride=4)
 
     def forward(self, s):
         """
@@ -119,13 +120,17 @@ class Net(nn.Module):
         #                                                  -> batch_size x 3 x 32 x 32
         # we apply the convolution layers, followed by batch normalisation, maxpool and relu x 3
         s = s.unsqueeze(1)  # batchsize, 224,224 to batchsize, 1,224,224
+
+        s = self.maxpool(s)
+
+        # s = s.permute(0,1,3,2)
         s = self.bn1(self.conv1(s))  # batch_size x num_channels x 32 x 32
         s = F.relu(F.max_pool2d(s, 2))  # batch_size x num_channels x 16 x 16
         s = self.bn2(self.conv2(s))  # batch_size x num_channels*2 x 16 x 16
         s = F.relu(F.max_pool2d(s, 2))  # batch_size x num_channels*2 x 8 x 8
-        s = self.bn3(self.conv3(s))  # batch_size x num_channels*4 x 8 x 8
-        s = F.relu(F.max_pool2d(s, 2))  # batch_size x num_channels*4 x 4 x 4
-
+        # s = self.bn3(self.conv3(s))  # batch_size x num_channels*4 x 8 x 8
+        # s = F.relu(F.max_pool2d(s, 2))  # batch_size x num_channels*4 x 4 x 4
+        
         # flatten the output for each image
         s = s.view(s.shape[0], -1)  # batch_size x 4*4*num_channels*4
         # s = s.view(-1, 4 * 4 * self.num_channels * 4)  # batch_size x 4*4*num_channels*4
@@ -136,6 +141,108 @@ class Net(nn.Module):
         s = self.fc2(s)  # batch_size x 10
 
         return s
+
+class ConvFuseNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        
+        self.channel_num = 8
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, self.channel_num, (6, 1), (3, 1)),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(self.channel_num),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(self.channel_num, self.channel_num * 2, (3, 1), (2, 1)),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(self.channel_num * 2),
+            # nn.MaxPool2d((2, 1), stride=(2, 1)),
+
+            nn.Conv2d(self.channel_num * 2, self.channel_num * 4, (3, 1), (2, 1)),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(self.channel_num * 4),
+            # nn.MaxPool2d(2)
+        )
+
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(1, self.channel_num, (1, 6),(1,3)),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(self.channel_num, self.channel_num*2, (1, 3),(1,2)),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num*2),
+            # nn.MaxPool2d(2),
+
+            nn.Conv2d(self.channel_num*2, self.channel_num*4, (1, 3),(1,2)),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num*4),
+            # nn.MaxPool2d(2)
+            # nn.MaxPool2d(2)
+
+        )
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(1, self.channel_num, 6,3),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(self.channel_num, self.channel_num*2, 3,2),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num*2),
+            # nn.MaxPool2d(2),
+
+            nn.Conv2d(self.channel_num*2, self.channel_num*4, 3, 2),
+            nn.ReLU(inplace=True),#))#,
+            nn.BatchNorm2d(self.channel_num*4),
+            # nn.MaxPool2d(2)
+            # nn.MaxPool2d(2)
+
+        )
+
+
+
+        self.fc = nn.Sequential(
+            nn.Linear(480,20),
+            # nn.ReLU(),
+            # nn.Linear(32,20)
+        )
+
+        self.maxpool = nn.MaxPool2d(4, stride=4)
+
+    def forward(self,x):
+
+        x = x.unsqueeze(1)
+
+        x = self.maxpool(x)
+
+        x1 = self.conv1(x)
+        x2 = self.conv2(x)
+        x3 = self.conv3(x)
+
+        x1 = F.max_pool2d(x1, (1,4))
+        x2 = F.max_pool2d(x2, (4,1))
+        # x3 = F.max_pool2d(x3, (2,2))
+
+
+        x1 = x1.view(x1.shape[0], -1)
+        x2 = x2.view(x2.shape[0], -1)
+        x3 = x3.view(x3.shape[0], -1)
+  
+        x = torch.cat((x1,x2,x3),dim=1)
+        
+        # print(x.size())
+        # exit()
+        out = self.fc(x)
+
+        return out
+
+
+
 
 
 def summarize(
@@ -183,10 +290,11 @@ def summarize(
 def main() -> None:
 
     num_ch_in = 224
-    num_samples_in = 64
+    num_samples_in = 224
     num_ch_out = 20
 
-    tinynet = TinyNet(num_ch_in, num_ch_out)
+    # tinynet = TinyNet(num_ch_in, num_ch_out)
+    tinynet = ConvFuseNet()
     tinynet.eval()
 
     input_size = (num_ch_in, num_samples_in)
@@ -194,5 +302,5 @@ def main() -> None:
     summarize(tinynet, input_size=input_size, verbose=verbose)
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

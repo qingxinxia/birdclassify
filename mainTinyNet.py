@@ -9,7 +9,16 @@ from torchvision import models, transforms
 import numpy as np
 from sklearn.model_selection import train_test_split
 from prepare_data.prepare_wmwb import list_subfolders, sliding_window_split
-from models import TinyNet
+from models import TinyNet,Net,ConvFuseNet
+import random
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
 class CustomDataset(Dataset):
     def __init__(self, samples, labels, transform=None):
@@ -100,12 +109,16 @@ def main():
     print(device)
 
     # model = ResNetClassifier(num_classes=20).to(device)
-    model = TinyNet(224, 20).to(device)
+    # model = TinyNet(224, 20).to(device)
+    model = ConvFuseNet().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.0005,
+    #                         momentum=0.9,
+    #                         weight_decay=1e-4)
 
     # Step 6: Training loop
-    num_epochs = 200
+    num_epochs = 100
 
     for epoch in range(num_epochs):
         model.train()
@@ -168,4 +181,5 @@ def main():
     return
 
 if __name__ == '__main__':
+    set_seed(199)
     main()
