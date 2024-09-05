@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from torchvision import models, transforms
+# from torchvision import models, transforms
 import numpy as np
 from sklearn.model_selection import train_test_split
 from prepare_data.prepare_wmwb import list_subfolders, sliding_window_split
-from models import TinyNet, Net
+from models import *
 import torch.nn.functional as F
 
 def distillation_loss(student_logits, teacher_logits, labels, temperature, alpha):
@@ -23,6 +23,8 @@ def distillation_loss(student_logits, teacher_logits, labels, temperature, alpha
 
         hard_loss = F.cross_entropy(student_logits, labels)
 
+        # # Compute L2 norm loss between teacher and student intermediate outputs
+        # l2_loss = F.mse_loss(student_intermediate, teacher_intermediate)
 
         total_loss = alpha * hard_loss + (1 - alpha) * distillation_loss
         return total_loss
@@ -47,17 +49,17 @@ class CustomDataset(Dataset):
         return sample, label
 
 # ResNet model
-class ResNetClassifier(nn.Module):
-    def __init__(self, num_classes):
-        super(ResNetClassifier, self).__init__()
-        self.resnet = models.resnet18(pretrained=False)
-        self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
-
-    def forward(self, x):
-        x = x.unsqueeze(1)  # Add channel dimension (1, 45, 20) -> (1, 1, 45, 20)
-        x = self.resnet(x)
-        return x
+# class ResNetClassifier(nn.Module):
+#     def __init__(self, num_classes):
+#         super(ResNetClassifier, self).__init__()
+#         self.resnet = models.resnet18(pretrained=True)
+#         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+#         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
+#
+#     def forward(self, x):
+#         x = x.unsqueeze(1)  # Add channel dimension (1, 45, 20) -> (1, 1, 45, 20)
+#         x = self.resnet(x)
+#         return x
 
 def load_data(datap):
     # datap = os.getcwd()
@@ -71,9 +73,11 @@ def load_data(datap):
     return trainX, trainY0, valX, valY0, testX, testY0
 
 def main():
+    batch_size = 256
     # root_path = r'dataset/wmwb'
     root_path = r'D:\code\BirdMLClassification\transfer_learning'
     teacherWeightPath = "pretrain_ResNet18_49.pt"
+    # teacherWeightPath = "pretrain_ResNet18_49.pt"
     trainX, trainY0, valX, valY0, testX, testY0 = load_data(root_path)
 
     unique_labels = np.unique(trainY0)
@@ -101,9 +105,9 @@ def main():
     val_dataset = CustomDataset(batch_valX, batch_valy)
     test_dataset = CustomDataset(batch_testX, batch_testy)
 
-    train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=512, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
 
     # Step 5: Initialize the model, loss function, and optimizer
@@ -125,13 +129,26 @@ def main():
     teacher_model.load_state_dict(checkpoint['model_state_dict'])
 
     # model = TinyNet(224, 20).to(device)
+    # model = Net_xia0829().to(device)
+    # model = SoundNet().to(device)
     model = Net().to(device)
+    pytorch_total_params = sum(p.numel() for p in teacher_model.parameters())
+    print('Teacher: total parameter number is: %d' % pytorch_total_params)
+
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print('Student: total parameter number is: %d' % pytorch_total_params)
+    for name, param in model.named_parameters():
+        # if param.requires_grad:
+            print(name, param.numel())
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-7)
 
     # Step 6: Training loop
-    num_epochs = 200
+    num_epochs = 2000
+    # Calculate L2 regularization (weight decay) loss
+    # l2_lambda = 0.01  # Regularization strength
+    # l2_reg = torch.tensor(0.0).to(device)  # Initialize L2 regularization term
 
     for epoch in range(num_epochs):
         model.train()
@@ -149,6 +166,13 @@ def main():
 
             loss = distillation_loss(outputs, outputsT, labels, temperature=7, alpha=0.25)
             # loss = criterion(outputs, labels)
+
+            # # Total loss including L2 regularization
+            # for param in model.parameters():
+            #     l2_reg += torch.norm(param, 2) ** 2  # Sum of squares of all parameters
+            #
+            # total_loss = loss + l2_lambda * l2_reg
+
             loss.backward()
             optimizer.step()
 

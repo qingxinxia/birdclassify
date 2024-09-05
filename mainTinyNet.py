@@ -9,7 +9,7 @@ from torchvision import models, transforms
 import numpy as np
 from sklearn.model_selection import train_test_split
 from prepare_data.prepare_wmwb import list_subfolders, sliding_window_split
-from models import TinyNet,Net,ConvFuseNet
+from models import *
 import random
 
 def set_seed(seed):
@@ -39,17 +39,17 @@ class CustomDataset(Dataset):
         return sample, label
 
 # ResNet model
-class ResNetClassifier(nn.Module):
-    def __init__(self, num_classes):
-        super(ResNetClassifier, self).__init__()
-        self.resnet = models.resnet18(pretrained=True)
-        self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
-
-    def forward(self, x):
-        x = x.unsqueeze(1)  # Add channel dimension (1, 45, 20) -> (1, 1, 45, 20)
-        x = self.resnet(x)
-        return x
+# class ResNetClassifier(nn.Module):
+#     def __init__(self, num_classes):
+#         super(ResNetClassifier, self).__init__()
+#         self.resnet = models.resnet18(pretrained=True)
+#         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+#         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
+#
+#     def forward(self, x):
+#         x = x.unsqueeze(1)  # Add channel dimension (1, 45, 20) -> (1, 1, 45, 20)
+#         x = self.resnet(x)
+#         return x
 
 def load_data(datap):
     # datap = os.getcwd()
@@ -63,7 +63,9 @@ def load_data(datap):
     return trainX, trainY0, valX, valY0, testX, testY0
 
 def main():
-    root_path = r'dataset/wmwb'
+    # root_path = r'dataset/wmwb'
+    root_path = r'D:\code\BirdMLClassification\transfer_learning'
+    batch_size = 512
 
     trainX, trainY0, valX, valY0, testX, testY0 = load_data(root_path)
 
@@ -92,41 +94,52 @@ def main():
     val_dataset = CustomDataset(batch_valX, batch_valy)
     test_dataset = CustomDataset(batch_testX, batch_testy)
 
-    train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=512, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
 
     # Step 5: Initialize the model, loss function, and optimizer
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
+    # if torch.cuda.is_available():
+    #     device = torch.device("cuda")
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device("mps")
+    # else:
+    #     device = torch.device("cpu")
+    device = torch.device("cpu")
     print(device)
 
     # model = ResNetClassifier(num_classes=20).to(device)
     # model = TinyNet(224, 20).to(device)
-    model = ConvFuseNet().to(device)
+    # model = SoundNet().to(device)
+    model = Net().to(device)
+    # model = ConvFuseNet().to(device)
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print('total parameter number is: %d'%pytorch_total_params)
+
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-7)
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.0005,
     #                         momentum=0.9,
     #                         weight_decay=1e-4)
 
     # Step 6: Training loop
     num_epochs = 100
+    # model.eval()
+    # dummy_input = torch.zeros(1, 244, 244)
+    # torch.onnx.export(model, dummy_input, "mnist.onnx")
 
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
-
+        correct = 0
+        total = 0
         for i, (inputs, labels) in enumerate(train_loader):
             inputs, labels = inputs.to(device), labels.to(device)
 
+            torch.onnx.export(model, inputs, "mnist.onnx")
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
@@ -134,27 +147,54 @@ def main():
             optimizer.step()
 
             running_loss += loss.item()
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader):.4f}")
+        print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {running_loss/len(train_loader):.4f}"
+              , f"Accuracy: {100 * correct / total: .2f} % ")
 
         # Step 7: Validation loop
-        model.eval()
-        val_loss = 0.0
-        correct = 0
-        total = 0
+        if epoch%3==0:
+            model.eval()
+            val_loss = 0.0
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for inputs, labels in val_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item()
 
-        with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
+                    _, predicted = torch.max(outputs, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
 
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+            print(f"Validation Loss: {val_loss / len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
 
-        print(f"Validation Loss: {val_loss/len(val_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
+            model.eval()
+            test_loss = 0.0
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for inputs, labels in test_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
+                    test_loss += loss.item()
+
+                    _, predicted = torch.max(outputs, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+
+            print(f"Test Loss: {test_loss/len(test_loader):.4f}, Accuracy: {100 * correct / total:.2f}%")
+
+        if epoch == num_epochs-1:
+            model_dir = 'Netxia_' + str(epoch) + '.pt'
+            print('Saving model at {} epoch to {}'.format(epoch, model_dir))
+            # torch.save(model.state_dict(), model_dir)
+            torch.save({'model_state_dict': model.state_dict()}, model_dir)
 
     print("Training complete.")
 
